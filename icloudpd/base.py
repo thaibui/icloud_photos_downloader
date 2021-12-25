@@ -97,6 +97,11 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
     is_flag=True,
 )
 @click.option(
+    "--only-videos",
+    help="Download only videos (default: Download all photos and videos)",
+    is_flag=True,
+)
+@click.option(
     "--skip-live-photos",
     help="Don't download any live photos (default: Download live photos)",
     is_flag=True,
@@ -208,6 +213,7 @@ def main(
         album,
         list_albums,
         skip_videos,
+        only_videos,
         skip_live_photos,
         force_size,
         auto_delete,
@@ -294,10 +300,13 @@ def main(
 
     directory = os.path.normpath(directory)
 
-    logger.debug(
-        "Looking up all photos%s from album %s...",
-        "" if skip_videos else " and videos",
-        album)
+    if only_videos:
+        logger.debug("Looking only videos from album %s", album)
+    else:
+        logger.debug(
+            "Looking up all photos%s from album %s...",
+            "" if skip_videos else " and videos",
+            album)
 
     def photos_exception_handler(ex, retries):
         """Handles session errors in the PhotoAlbum photos iterator"""
@@ -339,14 +348,23 @@ def main(
     photos_count_str = "the first" if photos_count == 1 else photos_count
     if not skip_videos:
         video_suffix = " or video" if photos_count == 1 else " and videos"
-    logger.info(
-        "Downloading %s %s photo%s%s to %s ...",
-        photos_count_str,
-        size,
-        plural_suffix,
-        video_suffix,
-        directory,
-    )
+    if only_videos:
+        logger.info(
+            "Downloading %s %s video%s to %s ...",
+            photos_count_str,
+            size,
+            plural_suffix,
+            directory,
+        )
+    else:
+        logger.info(
+            "Downloading %s %s photo%s%s to %s ...",
+            photos_count_str,
+            size,
+            plural_suffix,
+            video_suffix,
+            directory,
+        )
 
     # Use only ASCII characters in progress bar
     tqdm_kwargs["ascii"] = True
@@ -365,6 +383,11 @@ def main(
 
     def download_photo(counter, photo):
         """internal function for actually downloading the photos"""
+        if only_videos and photo.item_type != "movie":
+            logger.set_tqdm_description(
+                "Skipping %s, only downloading videos." % photo.filename
+            )
+            return
         if skip_videos and photo.item_type != "image":
             logger.set_tqdm_description(
                 "Skipping %s, only downloading photos." % photo.filename
